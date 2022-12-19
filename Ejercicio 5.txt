@@ -1,0 +1,233 @@
+/*
+4. Crear un Trigger para insertar en la tabla Log_Eventos la actualización de los pedidos, con las 
+siguientes condiciones:
+a. Utilizar la tabla Log_eventos creada en clases.
+b. El trigger debe ser de tipo AFTER UPDATE sobre la tabla Pedido.
+c. Lo datos a insertar son:
+i. Tabla = “Pedido”
+ii. Columna = “Numero_Pedido”
+iii. Valor = Número de pedido insertado
+iv. Tipo_Movimiento = “UPDATE”
+v. Fecha = Fecha del sistema
+*/
+CREATE TRIGGER tr_ActualizarPedidosLog ON Pedido
+		AFTER UPDATE
+AS
+	BEGIN
+		DECLARE @tabla VARCHAR (50)
+		DECLARE @columna VARCHAR (50)
+		DECLARE @valor VARCHAR (50)
+		DECLARE @tipo VARCHAR (50)
+
+		SET @tabla = 'Pedido'
+		SET @columna = 'Numero_Pedido'
+		SET @valor = (SELECT Numero_Pedido FROM inserted)
+		SET @tipo = 'UPDATE'
+
+		INSERT INTO Log_Eventos VALUES
+		(@tabla, @columna, @valor, @tipo, GETDATE())
+
+	END
+
+/*
+5. Crear un procedimiento almacenado para crear Pedidos con 2 artículos cada uno, con las siguientes 
+condiciones:
+a. Parámetros:
+i. Descripción artículo 1
+ii. Cantidad artículo 1
+iii. Descripción artículo 2
+iv. Cantidad artículo 2
+v. Nombre de Cliente
+vi. Descripción de Forma de pago
+vii. Descripción de Local
+viii. Mensaje (parámetro de salida)
+b. Por cada artículo debe obtener el Código y Precio respectivo a partir de la Descripción 
+ingresada como parámetro. En caso que el artículo no sea encontrado debe asignar el 
+mensaje “El artículo “ + Articulo_ingresado + “ no existe.” y luego se debe terminar el 
+procedimiento.
+c. Debe obtener el Código del Cliente a partir del Nombre de cliente ingresado como 
+parámetro. En caso que el cliente no sea encontrado debe asignar el mensaje “El cliente 
+“ + Cliente_ingresado + “ no existe.” y luego se debe terminar el procedimiento.
+d. Debe obtener el Código de la Forma de Pago a partir de la Descripción ingresada como 
+parámetro. En caso que la Forma de Pago no sea encontrada debe asignar el mensaje “La 
+forma de pago “ + FormaPago_ingresado + “ no existe.” y luego se debe terminar el
+procedimiento.
+e. Debe obtener el Código de Local a partir de la Descripción ingresada como parámetro. En 
+caso que el Local no sea encontrado debe asignar el mensaje “El local “ + Local_ingresado 
++ “ no existe.” y luego se debe terminar el procedimiento.
+f. Debe generar el número de pedido de manera automática, compuesto por la letra inicial 
+“P” seguido del número correlativo siguiente al último existente en la tabla Pedido.
+g. Debe crear una nueva fila en la tabla Pedido con los datos obtenidos (número de pedido, 
+códigos de cliente, forma de pago y local), utilizando el código de estado de pedido para 
+el estado “Ingresado” y la fecha y hora del sistema, dejando el precio con valor nulo.
+h. Debe crear una nueva fila en la tabla Pedido_Articulo para cada articulo ingresado con los 
+datos obtenidos (número de pedido, código de artículo, cantidad, precio).
+i. Luego de crear el pedido debe asignar el mensaje “Se ha creado exitosamente el pedido 
+número : “ + Numero_pedido + “.”.
+j. Para ejecutar el procedimiento almacenado use variables para el paso de parámetros y 
+finalmente muestre el mensaje que entrega.
+k. Crear al menos 3 pedidos utilizando el procedimiento almacenado.
+l. Debe consultar la tabla Pedido para verificar que el precio del pedido creado haya sido 
+correctamente calculado por el trigger del ejercicio 2.
+m. Debe consultar la tabla Log_Eventos para verificar que los movimientos de creación y 
+actualización de pedidos se encuentran registrados.
+*/
+CREATE PROCEDURE sp_Pedido2Articulos
+	@descripcion_1 VARCHAR(50),
+	@cantidad_1 DECIMAL(5),
+	@descripcion_2 VARCHAR(50),
+	@cantidad_2 DECIMAL(5),
+	@nombre_cli VARCHAR(50),
+	@des_forma_pago VARCHAR (50),
+	@des_local VARCHAR (50),
+	@mensaje VARCHAR (100) OUTPUT
+
+AS
+	--Variables
+	DECLARE @articulo_precio_1 DECIMAL (10,0)
+	DECLARE @articulo_precio_2 DECIMAL (10,0)
+	DECLARE @precio_total DECIMAL (10,0)
+	DECLARE @articulo_codigo_1 CHAR (5)
+	DECLARE @articulo_codigo_2 CHAR (5)
+	DECLARE @cliente_ingresado CHAR (5)
+	DECLARE @formaPago_ingresado CHAR (5)
+	DECLARE @local_ingresado CHAR (5)
+	DECLARE @num_pedido CHAR (10)
+
+	--Precios
+	SET @articulo_precio_1 = (SELECT Precio FROM Articulo WHERE Descripcion = @descripcion_1)
+	SET @articulo_precio_2 = (SELECT Precio FROM Articulo WHERE Descripcion = @descripcion_2)
+	SET @precio_total = @articulo_precio_1 + @articulo_precio_2
+
+
+	--Codigos
+	SET @articulo_codigo_1 = (SELECT Codigo FROM Articulo WHERE Descripcion = @descripcion_1)
+	SET @articulo_codigo_2 = (SELECT Codigo FROM Articulo WHERE Descripcion = @descripcion_2)
+
+	--Cliente
+	SET @cliente_ingresado = (SELECT Codigo FROM Cliente WHERE Nombre = @nombre_cli)
+
+	--Forma de Pago
+	SET @formaPago_ingresado = (SELECT Codigo FROM Forma_Pago WHERE Descripcion = @des_forma_pago)
+
+	--Local
+	SET @local_ingresado = (SELECT Codigo FROM Local WHERE Descripcion = @des_local)
+
+	--Numero Pedido
+	SET @num_pedido = (SELECT MAX(SUBSTRING(Numero_Pedido, 2, 9)) +1 FROM Pedido)
+	SET @num_pedido = 'P' + @num_pedido
+
+	--Validaciones
+	IF @articulo_codigo_1 IS NULL 
+		BEGIN
+			SET @mensaje = 'El artículo ' + @articulo_codigo_1 + ' no existe.'
+			RETURN
+		END
+	IF @articulo_codigo_2 IS NULL 
+		BEGIN
+			SET @mensaje = 'El artículo ' + @articulo_codigo_2 + ' no existe.'
+			RETURN
+		END
+	IF @cliente_ingresado IS NULL 
+		BEGIN
+			SET @mensaje = 'El cliente ' + @cliente_ingresado + ' no existe.'
+			RETURN
+		END
+	IF @formaPago_ingresado IS NULL 
+		BEGIN
+			SET @mensaje = 'La forma de pago ' + @formaPago_ingresado + ' no existe.'
+			RETURN
+		END
+	IF @local_ingresado IS NULL 
+		BEGIN
+			SET @mensaje = 'El local ' + @local_ingresado + ' no existe.'
+			RETURN
+		END
+	ELSE
+		BEGIN
+			
+			INSERT INTO Pedido VALUES  
+			(@num_pedido,GETDATE(), NULL, 'INGRE', @formaPago_ingresado, @cliente_ingresado, @local_ingresado)
+
+			INSERT INTO Pedido_Articulo VALUES
+			(@num_pedido, @articulo_codigo_1, @cantidad_1, @articulo_precio_1)
+
+			INSERT INTO Pedido_Articulo VALUES
+			(@num_pedido, @articulo_codigo_2, @cantidad_2, @articulo_precio_2)
+			
+			SET @mensaje = 'Se ha creado exitosamente el pedido número: ' + @num_pedido + '.'
+			RETURN
+		END
+
+--Pedidos
+--Primero
+DECLARE @des1_ped VARCHAR(50)
+DECLARE @cant1_ped DECIMAL(5)
+DECLARE @des2_ped VARCHAR(50)
+DECLARE @cant2_ped DECIMAL(5)
+DECLARE @cliente VARCHAR(50)
+DECLARE @forma_pago VARCHAR (50)
+DECLARE @local VARCHAR (50)
+DECLARE @mensaje_ped VARCHAR (100)
+
+SET @des1_ped = 'Alitas BBQ 6 Unidades'
+SET @cant1_ped = 3
+SET @des2_ped = 'Botella Coca Cola 3L.'
+SET @cant2_ped = 1
+SET @cliente = 'SUSANA ROSA JIMENEZ JERIA'
+SET @forma_pago = 'ONECLICK TRANSBANK'
+SET @local = 'Alameda'
+
+EXECUTE sp_Pedido2Articulos @des1_ped, @cant1_ped, @des2_ped, @cant2_ped, @cliente, @forma_pago, @local, @mensaje_ped OUTPUT
+
+PRINT 'Mensaje = ' + @mensaje_ped
+
+--Segundo
+DECLARE @des1_ped2 VARCHAR(50)
+DECLARE @cant1_ped2 DECIMAL(5)
+DECLARE @des2_ped2 VARCHAR(50)
+DECLARE @cant2_ped2 DECIMAL(5)
+DECLARE @cliente2 VARCHAR(50)
+DECLARE @forma_pago2 VARCHAR (50)
+DECLARE @local2 VARCHAR (50)
+DECLARE @mensaje_ped2 VARCHAR (100)
+
+SET @des1_ped2 = 'Pan Ajo Tradicional 4 Und.'
+SET @cant1_ped2 = 1
+SET @des2_ped2 = 'Pizza Suprema'
+SET @cant2_ped2 = 2
+SET @cliente2 = 'CARLOS IGNACIO SOTO AMENABAR'
+SET @forma_pago2 = 'TARJETA DE DÉBITO'
+SET @local2 = 'Maipú'
+
+EXECUTE sp_Pedido2Articulos @des1_ped2, @cant1_ped2, @des2_ped2, @cant2_ped2, @cliente2, @forma_pago2, @local2, @mensaje_ped2 OUTPUT
+
+PRINT 'Mensaje = ' + @mensaje_ped2
+
+--Tercero
+DECLARE @des1_ped3 VARCHAR(50)
+DECLARE @cant1_ped3 DECIMAL(5)
+DECLARE @des2_ped3 VARCHAR(50)
+DECLARE @cant2_ped3 DECIMAL(5)
+DECLARE @cliente3 VARCHAR(50)
+DECLARE @forma_pago3 VARCHAR (50)
+DECLARE @local3 VARCHAR (50)
+DECLARE @mensaje_ped3 VARCHAR (100)
+
+SET @des1_ped3 = 'Chocotorta Doble'
+SET @cant1_ped3 = 2
+SET @des2_ped3 = 'Helado La Cremeria Brownie'
+SET @cant2_ped3 = 3
+SET @cliente3 = 'JUAN CRISTOBAL PEREZ RIVAS'
+SET @forma_pago3 = 'EFECTIVO'
+SET @local3 = 'Colombia'
+
+EXECUTE sp_Pedido2Articulos @des1_ped3, @cant1_ped3, @des2_ped3, @cant2_ped3, @cliente3, @forma_pago3, @local3, @mensaje_ped3 OUTPUT
+
+PRINT 'Mensaje = ' + @mensaje_ped3
+
+--Vista Pedidos con nuevo precio (Trigger)
+SELECT * FROM Pedido
+
+--Log Eventos
+SELECT * FROM Log_eventos
